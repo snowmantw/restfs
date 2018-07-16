@@ -1,0 +1,13 @@
+[package]
+authors = ["Greg Weng<snowmantw@gmail.com>"]
+name = "restfs_lib"
+version = "0.1.0"
+
+[dependencies]
+
+[dependencies.pyo3]
+path = "../pyo3"
+
+[lib]
+name = "restfs_lib"
+crate-type = ["cdylib"]
