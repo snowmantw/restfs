@@ -4,6 +4,8 @@ name = "restfs_lib"
 version = "0.1.0"
 
 [dependencies]
+fuse = "0.3"
+time = "0.1"
 
 [dependencies.pyo3]
 path = "../pyo3"
