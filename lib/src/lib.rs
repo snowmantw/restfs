@@ -8,7 +8,6 @@ extern crate env_logger;
 extern crate libc;
 extern crate time;
 
-use std::env;
 use std::ffi::OsStr;
 use libc::ENOENT;
 use time::Timespec;
@@ -19,23 +18,26 @@ use pyo3::pymodinit;
 
 #[pymodinit]
 fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
-    #[pyfn(m, "test")]
+    #[pyfn(m, "mount")]
     // ``#[pyfn()]` converts the arguments from Python objects to Rust values
     // and the Rust return value back into a Python object.
-    fn test_py() -> PyResult<()> {
-      Ok(test())
+    fn mount_py(mpath: String) -> PyResult<()> {
+      Ok(mount(&mpath))
     }
 
     Ok(())
 }
 
-fn test() -> () {
+fn mount(mpath: &str) -> () {
     env_logger::init();
-    let mountpoint = env::args_os().nth(1).unwrap();
+    let mountpoint = mpath; 
     let options = ["-o", "ro", "-o", "fsname=hello"]
         .iter()
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
+
+    // This will hold the main process until it get `umount`:
+    // better to call umount if Python get KeyInterrupt from Python side.
     fuse::mount(HelloFS, &mountpoint, &options).unwrap();
 }
 
