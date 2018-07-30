@@ -97,6 +97,8 @@ fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
             Ok((statuscode, String::from(response)))
         }
 
+        // NOTE: for how to set header in Hyper:
+        // https://github.com/hyperium/hyper/issues/81
         fn commit(&self, verb: u8, header: &str, url: &str, body: &str) -> 
             PyResult<()>
         {
