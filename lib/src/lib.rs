@@ -128,7 +128,7 @@ fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn mount(madapter: &Adapter, mpath: &str) -> () {
+fn mount(madapter: Adapter, mpath: &str) -> () {
     env_logger::init();
     let mountpoint = mpath; 
     let options = ["-o", "ro", "-o", "fsname=hello"]
@@ -138,7 +138,7 @@ fn mount(madapter: &Adapter, mpath: &str) -> () {
 
     // This will hold the main process until it get `umount`:
     // better to call umount if Python get KeyInterrupt from Python side.
-    fuse::mount(RestFS, &mountpoint, &options).unwrap();
+    fuse::mount(RestFS { adapter: madapter }, &mountpoint, &options).unwrap();
 }
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 };                     // 1 second
@@ -181,10 +181,13 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
 };
 
-struct RestFS;
+struct RestFS {
+    adapter: Adapter
+}
 
 impl Filesystem for RestFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
+        self.adapter.commit();
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
