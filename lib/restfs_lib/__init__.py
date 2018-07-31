@@ -1,3 +1,3 @@
-from .restfslib import mount
+from .restfslib import mount, Adapter
 
-__all__ = ['mount']
+__all__ = ['mount', 'Adapter']

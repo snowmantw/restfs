@@ -7,6 +7,15 @@ from os import mkdir
 from multiprocessing import Process
 from time import sleep
 
+class TestAdapter(restfs_lib.Adapter):
+
+    def precommit(self, verb, headers, url, body):
+        return (verb, headers, url, body)
+
+tf = TestAdapter()
+(_, hhs, _, _) = tf.precommit(0, {'foo': 'bar'}, 'http://www.google.com', '{"json":"body"}')
+tf.postcommit(123, 'fooresonse')
+
 def do_mount(path):
 
   if not path.exists():
@@ -14,7 +23,8 @@ def do_mount(path):
 
   try:
     # Block call.
-    restfs_lib.mount(str(path))
+    restfs_lib.mount(tf, str(path))
+
   except KeyboardInterrupt:
     pass
 

@@ -32,93 +32,103 @@ enum HTTPVerb {
     PATCH
 }
 
+#[pyclass(subclass)]
+struct Adapter {
+    #[prop(get, set)]
+    debug: bool,
+    token: PyToken
+}
+
+#[pymethods]
+impl Adapter {
+    #[new]
+    fn __new__(obj: &PyRawObject, _debug: Option<bool>) -> PyResult<()> {
+        let debug = match _debug {
+            Some(x) => x,
+            None => false,
+        };
+        obj.init(|token| {
+            Adapter {
+                debug,
+                token
+            }
+        })
+    }
+
+    // TODO: decide to turn verb to Python Enum (complicated to introduced) or
+    // keep as Rust enum (cannot export back to python for customed overriding method)
+    //
+    // NOTE: Input Arguments should be Py* types (with FromPyObject)
+    // NOTE: Output PyResult should be in Rust (with IntoPyObject)
+    // XXX: Therefore, this default method need to copy all from headers and convert it
+    // to a new HashMap in Rust, as the result.
+    //
+    // NOTE: PyResult + HashMap has conversion issue should avoid:
+    // https://www.reddit.com/r/Python/comments/8svfkz/writing_python_extensions_in_rust_using_pyo3/
+    fn precommit(&self, verb: u8, headers: &PyDict, url: &str, body: &str) ->
+        PyResult<(u8, HashMap<String, String>, String, String)>
+    {
+        let mut hheaders = HashMap::new();
+        let hitems = headers.copy().unwrap().into_iter();
+        for h in hitems {
+            let (pyhk, pyhv) = h;
+            let hk = pyhk.extract::<&str>().unwrap();
+            let hv = pyhv.extract::<&str>().unwrap();
+            hheaders.insert(String::from(hk), String::from(hv));
+        }
+        // Overriding method for specific RESTful service should change the URL and body
+        // if it is necessary.
+        Ok((verb, hheaders, String::from(url), String::from(body)))
+    }
+
+    // After receiving the response from server: if it is 200 then create/overwrite a file
+    // according to the [1] String of PyResult here returned. Log-only for other status code
+    //
+    // Overriding this method to provide customed content to write to the file.
+    // Customed logic can know the type of receiving for Accept header get set
+    // and catched in precommit.
+    fn postcommit(&self, statuscode: u8, response: &str) ->
+        PyResult<(u8, String)>
+    {
+        Ok((statuscode, String::from(response)))
+    }
+
+    // NOTE: for how to set header in Hyper:
+    // https://github.com/hyperium/hyper/issues/81
+    fn commit(&self) -> 
+        PyResult<()>
+    {
+        println!("TODO: implement adapter commit to service");
+        // TODO: header from single string to parsed structure and to Hyper header map:
+        //
+        // https://docs.rs/hyper/0.12.7/hyper/struct.HeaderMap.html
+        //
+        // Then send it with body:
+        //
+        // https://github.com/hyperium/hyper/blob/master/examples/web_api.rs
+        //
+        // Body seems simple after the Content-Type get set
+        Ok(())
+    }
+}
+
 #[pymodinit]
 fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "mount")]
     // ``#[pyfn()]` converts the arguments from Python objects to Rust values
     // and the Rust return value back into a Python object.
-    fn mount_py(mpath: String) -> PyResult<()> {
-      Ok(mount(&mpath))
-    }
-    #[pyclass(subclass)]
-    struct Filesystem {
-        #[prop(get, set)]
-        debug: bool,
-        token: PyToken
+    fn mount_py(_py: Python, madapter: PyObject, mpath: String) -> PyResult<()> {
+      Ok(mount(madapter.extract(_py).unwrap(), &mpath))
     }
 
-    #[pymethods]
-    impl Filesystem {
-        #[new]
-        fn __new__(obj: &PyRawObject, debug: bool) -> PyResult<()> {
-            obj.init(|token| {
-                Filesystem {
-                    debug,
-                    token
-                }
-            })
-        }
-
-        // TODO: decide to turn verb to Python Enum (complicated to introduced) or
-        // keep as Rust enum (cannot export back to python for customed overriding method)
-        //
-        // NOTE: Input Arguments should be Py* types (with FromPyObject)
-        // NOTE: Output PyResult should be in Rust (with IntoPyObject)
-        // XXX: Therefore, this default method need to copy all from headers and convert it
-        // to a new HashMap in Rust, as the result.
-        //
-        // NOTE: PyResult + HashMap has conversion issue should avoid:
-        // https://www.reddit.com/r/Python/comments/8svfkz/writing_python_extensions_in_rust_using_pyo3/
-        fn precommit(&self, py: Python, verb: u8, headers: &PyDict, url: &str, body: &str) ->
-            PyResult<(u8, HashMap<String, String>, String, String)>
-        {
-            let mut hheaders = HashMap::new();
-            let hitems = headers.copy().unwrap().into_iter();
-            for h in hitems {
-                let (pyhk, pyhv) = h;
-                let hk = pyhk.extract::<&str>().unwrap();
-                let hv = pyhv.extract::<&str>().unwrap();
-                hheaders.insert(String::from(hk), String::from(hv));
-            }
-            // Overriding method for specific RESTful service should change the URL and body
-            // if it is necessary.
-            Ok((verb, hheaders, String::from(url), String::from(body)))
-        }
-
-        // After receiving the response from server: if it is 200 then create/overwrite a file
-        // according to the [1] String of PyResult here returned. Log-only for other status code
-        //
-        // Overriding this method to provide customed content to write to the file.
-        // Customed logic can know the type of receiving for Accept header get set
-        // and catched in precommit.
-        fn postcommit(&self, statuscode: u8, response: &str) ->
-            PyResult<(u8, String)>
-        {
-            Ok((statuscode, String::from(response)))
-        }
-
-        // NOTE: for how to set header in Hyper:
-        // https://github.com/hyperium/hyper/issues/81
-        fn commit(&self, verb: u8, header: &str, url: &str, body: &str) -> 
-            PyResult<()>
-        {
-            // TODO: header from single string to parsed structure and to Hyper header map:
-            //
-            // https://docs.rs/hyper/0.12.7/hyper/struct.HeaderMap.html
-            //
-            // Then send it with body:
-            //
-            // https://github.com/hyperium/hyper/blob/master/examples/web_api.rs
-            //
-            // Body seems simple after the Content-Type get set
-            Ok(())
-        }
-    }
+    // NOTE: need this to add the class to the module.
+    // https://docs.rs/pyo3/0.2.5/pyo3/struct.PyModule.html#method.add_class
+    m.add_class::<Adapter>()?;
 
     Ok(())
 }
 
-fn mount(mpath: &str) -> () {
+fn mount(madapter: &Adapter, mpath: &str) -> () {
     env_logger::init();
     let mountpoint = mpath; 
     let options = ["-o", "ro", "-o", "fsname=hello"]
@@ -128,7 +138,7 @@ fn mount(mpath: &str) -> () {
 
     // This will hold the main process until it get `umount`:
     // better to call umount if Python get KeyInterrupt from Python side.
-    fuse::mount(HelloFS, &mountpoint, &options).unwrap();
+    fuse::mount(RestFS, &mountpoint, &options).unwrap();
 }
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 };                     // 1 second
@@ -171,9 +181,9 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
 };
 
-struct HelloFS;
+struct RestFS;
 
-impl Filesystem for HelloFS {
+impl Filesystem for RestFS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
