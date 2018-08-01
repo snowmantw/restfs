@@ -68,14 +68,7 @@ impl Adapter {
     fn precommit(&self, verb: u8, headers: &PyDict, url: &str, body: &str) ->
         PyResult<(u8, HashMap<String, String>, String, String)>
     {
-        let mut hheaders = HashMap::new();
-        let hitems = headers.copy().unwrap().into_iter();
-        for h in hitems {
-            let (pyhk, pyhv) = h;
-            let hk = pyhk.extract::<&str>().unwrap();
-            let hv = pyhv.extract::<&str>().unwrap();
-            hheaders.insert(String::from(hk), String::from(hv));
-        }
+        let hheaders = from_py_dict(headers);
         // Overriding method for specific RESTful service should change the URL and body
         // if it is necessary.
         Ok((verb, hheaders, String::from(url), String::from(body)))
@@ -92,24 +85,18 @@ impl Adapter {
     {
         Ok((statuscode, String::from(response)))
     }
+}
 
-    // NOTE: for how to set header in Hyper:
-    // https://github.com/hyperium/hyper/issues/81
-    fn commit(&self) -> 
-        PyResult<()>
-    {
-        println!("TODO: implement adapter commit to service");
-        // TODO: header from single string to parsed structure and to Hyper header map:
-        //
-        // https://docs.rs/hyper/0.12.7/hyper/struct.HeaderMap.html
-        //
-        // Then send it with body:
-        //
-        // https://github.com/hyperium/hyper/blob/master/examples/web_api.rs
-        //
-        // Body seems simple after the Content-Type get set
-        Ok(())
+fn from_py_dict(pd: &PyDict) -> HashMap<String, String> {
+    let mut hmap = HashMap::new();
+    let hitems = pd.copy().unwrap().into_iter();
+    for h in hitems {
+        let (pyhk, pyhv) = h;
+        let hk = pyhk.extract::<&str>().unwrap();
+        let hv = pyhv.extract::<&str>().unwrap();
+        hmap.insert(String::from(hk), String::from(hv));
     }
+    return hmap;
 }
 
 #[pymodinit]
@@ -118,7 +105,8 @@ fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
     // ``#[pyfn()]` converts the arguments from Python objects to Rust values
     // and the Rust return value back into a Python object.
     fn mount_py(_py: Python, madapter: PyObject, mpath: String) -> PyResult<()> {
-      Ok(mount(madapter.extract(_py).unwrap(), &mpath))
+        // need to handle passing GIL/py here to the RestFS structure (for calling its methods)
+        Ok(mount(madapter.extract(_py).unwrap(), &mpath))
     }
 
     // NOTE: need this to add the class to the module.
@@ -186,9 +174,45 @@ struct RestFS<'a> {
     adapter: &'a Adapter
 }
 
+impl<'a> RestFS<'a> {
+
+    // NOTE: for how to set header in Hyper:
+    // https://github.com/hyperium/hyper/issues/81
+    fn commit(&self, madapter: &Adapter)
+    {
+         let gil = Python::acquire_gil();
+
+         /*
+        // NOTE:
+        // precommit: By default there is only empty header to send.
+        // the prev...preb will be Rust value since its definition.
+        let (prev, preh, preu, preb) = madapter.precommit(0, PyDict::new(py),
+            "https://www.google.com", "{\"foo\":3}").unwrap();
+
+
+        for val in preh.values() {
+            println!("{}", val);
+        }
+        */
+
+        println!("TODO: implement adapter commit to service");
+        // TODO: header from single string to parsed structure and to Hyper header map:
+        //
+        // https://docs.rs/hyper/0.12.7/hyper/struct.HeaderMap.html
+        //
+        // Then send it with body:
+        //
+        // https://github.com/hyperium/hyper/blob/master/examples/web_api.rs
+        //
+        // Body seems simple after the Content-Type get set
+    }
+
+}
+
 impl<'a> Filesystem for RestFS<'a> {
+
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        self.adapter.commit();
+        self.commit(self.adapter);
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {

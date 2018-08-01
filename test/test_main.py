@@ -10,6 +10,7 @@ from time import sleep
 class TestAdapter(restfs_lib.Adapter):
 
     def precommit(self, verb, headers, url, body):
+        headers['X-New-By-Precommit'] = 499
         return (verb, headers, url, body)
 
 tf = TestAdapter()
