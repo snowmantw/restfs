@@ -85,6 +85,16 @@ impl Adapter {
     {
         Ok((statuscode, String::from(response)))
     }
+
+    // NOTE: since it is failed to acquire GIL from Rust side not connected with PyO3 (like defined
+    // as RestFS::commit), we have no choice but define commit function here.
+    //
+    // The GIL failed because of pythread init assertion failure. Ref:
+    // https://github.com/PyO3/pyo3/blob/master/src/pythonrun.rs#L42
+    fn commit(&self) -> PyResult<()>
+    {
+        Ok(())
+    }
 }
 
 fn from_py_dict(pd: &PyDict) -> HashMap<String, String> {
@@ -105,6 +115,7 @@ fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
     // ``#[pyfn()]` converts the arguments from Python objects to Rust values
     // and the Rust return value back into a Python object.
     fn mount_py(_py: Python, madapter: PyObject, mpath: String) -> PyResult<()> {
+        // TODO
         // need to handle passing GIL/py here to the RestFS structure (for calling its methods)
         Ok(mount(madapter.extract(_py).unwrap(), &mpath))
     }
@@ -129,7 +140,6 @@ fn mount(madapter: &Adapter, mpath: &str) -> () {
     // better to call umount if Python get KeyInterrupt from Python side.
     fuse::mount(RestFS { adapter: madapter }, &mountpoint, &options).unwrap();
 }
-
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 };                     // 1 second
 
 const CREATE_TIME: Timespec = Timespec { sec: 1381237736, nsec: 0 };    // 2013-10-08 08:56
@@ -174,45 +184,10 @@ struct RestFS<'a> {
     adapter: &'a Adapter
 }
 
-impl<'a> RestFS<'a> {
-
-    // NOTE: for how to set header in Hyper:
-    // https://github.com/hyperium/hyper/issues/81
-    fn commit(&self, madapter: &Adapter)
-    {
-         let gil = Python::acquire_gil();
-
-         /*
-        // NOTE:
-        // precommit: By default there is only empty header to send.
-        // the prev...preb will be Rust value since its definition.
-        let (prev, preh, preu, preb) = madapter.precommit(0, PyDict::new(py),
-            "https://www.google.com", "{\"foo\":3}").unwrap();
-
-
-        for val in preh.values() {
-            println!("{}", val);
-        }
-        */
-
-        println!("TODO: implement adapter commit to service");
-        // TODO: header from single string to parsed structure and to Hyper header map:
-        //
-        // https://docs.rs/hyper/0.12.7/hyper/struct.HeaderMap.html
-        //
-        // Then send it with body:
-        //
-        // https://github.com/hyperium/hyper/blob/master/examples/web_api.rs
-        //
-        // Body seems simple after the Content-Type get set
-    }
-
-}
-
 impl<'a> Filesystem for RestFS<'a> {
 
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        self.commit(self.adapter);
+        self.adapter.commit();
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
