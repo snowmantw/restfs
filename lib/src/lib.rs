@@ -128,7 +128,8 @@ fn restfslib(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn mount(madapter: Adapter, mpath: &str) -> () {
+// NOTE: Need pass the Adapter since we need to call methods after mouting for operations.
+fn mount(madapter: &Adapter, mpath: &str) -> () {
     env_logger::init();
     let mountpoint = mpath; 
     let options = ["-o", "ro", "-o", "fsname=hello"]
@@ -181,11 +182,11 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
 };
 
-struct RestFS {
-    adapter: Adapter
+struct RestFS<'a> {
+    adapter: &'a Adapter
 }
 
-impl Filesystem for RestFS {
+impl<'a> Filesystem for RestFS<'a> {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         self.adapter.commit();
         if parent == 1 && name.to_str() == Some("hello.txt") {
