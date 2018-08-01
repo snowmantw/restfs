@@ -91,7 +91,8 @@ impl Adapter {
     //
     // The GIL failed because of pythread init assertion failure. Ref:
     // https://github.com/PyO3/pyo3/blob/master/src/pythonrun.rs#L42
-    fn commit(&self) -> PyResult<()>
+    fn commit(&self, verb: u8, headers: &PyDict, url: &str, body: &str) ->
+        PyResult<()>
     {
         Ok(())
     }
