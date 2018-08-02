@@ -91,7 +91,9 @@ impl Adapter {
     //
     // The GIL failed because of pythread init assertion failure. Ref:
     // https://github.com/PyO3/pyo3/blob/master/src/pythonrun.rs#L42
-    fn commit(&self, verb: u8, headers: &PyDict, url: &str, body: &str) ->
+    //
+    // TODO: turn the file operation (fop) to enum.
+    fn commit(&self, fop: u8, path: &str) ->
         PyResult<()>
     {
         Ok(())
@@ -185,10 +187,20 @@ struct RestFS<'a> {
     adapter: &'a Adapter
 }
 
+/**
+ * For the inode:
+ *
+ * 1 means `.` in the fs
+ * 2 means `hello.txt`
+ *
+ * We need a tracking list for each file/directory created because of restful operations.
+ */
+
 impl<'a> Filesystem for RestFS<'a> {
 
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        self.adapter.commit();
+
+        self.adapter.commit(0, name.to_str());
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
