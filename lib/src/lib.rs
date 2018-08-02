@@ -141,7 +141,7 @@ fn mount(madapter: &Adapter, mpath: &str) -> () {
 
     // This will hold the main process until it get `umount`:
     // better to call umount if Python get KeyInterrupt from Python side.
-    fuse::mount(RestFS { adapter: madapter }, &mountpoint, &options).unwrap();
+    fuse::mount(RestFS { adapter: madapter, table: HashMap::new() }, &mountpoint, &options).unwrap();
 }
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 };                     // 1 second
 
@@ -183,8 +183,19 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     flags: 0,
 };
 
+enum FileContent {
+    Directory(Vec<u64>),
+    File(String)
+}
+
+struct FileNode {
+    name: String,
+    content: FileContent
+}
+
 struct RestFS<'a> {
-    adapter: &'a Adapter
+    adapter: &'a Adapter,
+    table: HashMap<u64, FileNode>
 }
 
 /**
@@ -194,13 +205,21 @@ struct RestFS<'a> {
  * 2 means `hello.txt`
  *
  * We need a tracking list for each file/directory created because of restful operations.
+ *
+ * For a practical fs design about filenames:
+ * https://unix.stackexchange.com/questions/117325/where-are-filenames-stored-on-a-filesystem
+ *
+ * But using an universal table is enough for this case. This is a disk in memory, and we use a
+ * table to store all the things including content. There is two keys: inode and name, while the
+ * content is either a String or an inode (if it is directory).
+ *
  */
 
 impl<'a> Filesystem for RestFS<'a> {
 
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
 
-        self.adapter.commit(0, name.to_str());
+        self.adapter.commit(0, name.to_str().unwrap());
         if parent == 1 && name.to_str() == Some("hello.txt") {
             reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
         } else {
